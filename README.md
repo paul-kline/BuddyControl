@@ -44,3 +44,17 @@ Safety:
        assume that this is just a new (and quickly introduced) lighting environment and re-calibrate
        this new lighting level as indicating the 'off' light state.
        
+How the sensor determines a button press:
+  We keep track of the DIMMEST light that has been detected within a certain amount of time (I beleive currently
+  700 milliseconds). If at any time, the dimmest value recorded within 700 milliseconds is less than 300 less (on a
+  scale of 0 - 1023), this is considered a drastic light change, characteristic of a button press. Once we detect 
+  that the button has been pressed, we make note of the time that occurred. If the light level does not get dimmer
+  by at least the same threshold that triggered the button on state within (currently) 700 milliseconds, we trigger
+  the panic. Let it also be noted that during the button-on state we continuously look for and keep the brightest
+  value recorded. It is then that brightest recorded value we wait for the jump back down from.
+  
+  In this way, we can handle slower light changes with ease (i.e. sunlight) for we only trigger the change in
+  light level recorded. 
+  
+       
+       
