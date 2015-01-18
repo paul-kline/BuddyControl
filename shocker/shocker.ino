@@ -1,5 +1,6 @@
 
 #include <Servo.h>  // servo library
+#include "Trigger.h"
 
 
 Servo servo1;  // servo control object
