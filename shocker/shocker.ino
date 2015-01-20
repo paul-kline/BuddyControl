@@ -1,12 +1,15 @@
 
 #include <Servo.h>  // servo library
-#include "Trigger.h"
+//#include "Trigger.h"
 
 
 Servo servo1;  // servo control object
 
 const int buzzerPin = 10;
+int restingDegrees = 180;
 
+unsigned long lastReset=0;
+unsigned long resetInterval = 600000; //600000 = 10 min.
 char names[] = { 
   'c', 'd', 'e', 'f', 'g', 'a', 'b', 'C' };
 int frequencies[] = {
@@ -43,7 +46,26 @@ long testingTimeout = 60*1000*10;
 int lightLevel=-1;
 unsigned long lastReported=0;
 
+void resetServo(){
+  servo1.attach(9);
+  servo1.write(restingDegrees);   // Tell servo to go to 180 degrees
+  delay(400);         // Pause to get it time to move
+
+  servo1.detach();
+  Serial.println("Servo Position Reset");
+  
+}
+void maybeReset(){
+  unsigned long t = millis();
+  if(t > resetInterval && lastReset < (t - resetInterval)){
+    resetServo();
+    lastReset = t;
+  }
+  
+}
+
 void loop(){
+  maybeReset(); // periodically put the servo back because electrical noise tends to move it..
   handleLight();
 
 
@@ -96,7 +118,7 @@ void beep(int count){
   } 
 }
 
-int restingDegrees = 180;
+
 
 //SHOCK
 void shock(){
@@ -249,5 +271,3 @@ void panic(){
   servo1.detach();
   Serial.println("PANICKED!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
-
-
