@@ -1,11 +1,54 @@
+#include <nRF24L01.h>
+#include <RF24.h>
+#include <RF24_config.h>
+#include <SPI.h>
 
 #include <Servo.h>  // servo library
 //#include "Trigger.h"
 
+//
+// Hardware configuration
+//
 
+// Set up nRF24L01 radio on SPI bus plus pins 9 & 10 
+
+RF24 radio(9,10);
+
+//
+// Topology
+//
+
+// Radio pipe addresses for the 2 nodes to communicate.
+const uint64_t pipes[3] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL, 0xF0F0FFF6D2LL };
+
+const uint64_t waterPipe = 0xF0F0FFF6D2LL;
+unsigned long squirtHimCode = 1000000001;
+//
+// Role management
+//
+// Set up role.  This sketch uses the same software for all the nodes
+// in this system.  Doing so greatly simplifies testing.  
+//
+
+// The various roles supported by this sketch
+typedef enum { role_ping_out = 1, role_pong_back } role_e;
+
+// The debug-friendly names of those roles
+const char* role_friendly_name[] = { "invalid", "Ping out", "Pong back"};
+
+// The role of the current running sketch
+role_e role = role_pong_back;
+
+
+
+
+
+unsigned long tripWireCode = 1122334455;
+unsigned long proxCode = 1223334444;
 Servo servo1;  // servo control object
 
-const int buzzerPin = 10;
+const int buzzerPin = 3;
+const int servoPin = 5;
 int restingDegrees = 180;
 
 unsigned long lastReset=0;
@@ -35,7 +78,54 @@ void setup()
   Serial.begin(9600);  
   Serial.println("--- Start Serial Monitor SEND_RCVE ---");
 
+  
+  
+  //
+  // Setup and configure rf radio
+  //
 
+///  radio.begin();
+
+  // optionally, increase the delay between retries & # of retries
+///  radio.setRetries(15,15);
+
+  // optionally, reduce the payload size.  seems to
+  // improve reliability
+  //radio.setPayloadSize(8);
+
+  //
+  // Open pipes to other nodes for communication
+  //
+
+  // This simple sketch opens two pipes for these two nodes to communicate
+  // back and forth.
+  // Open 'our' pipe for writing
+  // Open the 'other' pipe for reading, in position #1 (we can have up to 5 pipes open for reading)
+
+  //if ( role == role_ping_out )
+  {
+///    radio.openWritingPipe(pipes[2]);
+///    radio.openReadingPipe(1,pipes[0]);
+  }
+  //else
+  {
+    //radio.openWritingPipe(pipes[1]);
+    //radio.openReadingPipe(1,pipes[0]);
+  }
+
+  //
+  // Start listening
+  //
+
+///  radio.startListening();
+
+  //
+  // Dump the configuration of the rf unit for debugging
+  //
+///  role = role_ping_out;
+ // radio.openWritingPipe(pipes[0]);
+ // radio.openReadingPipe(1,pipes[1]);
+///  radio.printDetails();
 
 
 }
@@ -46,8 +136,9 @@ long testingTimeout = 60*1000*10;
 int lightLevel=-1;
 unsigned long lastReported=0;
 
+
 void resetServo(){
-  servo1.attach(9);
+  servo1.attach(servoPin);
   servo1.write(restingDegrees);   // Tell servo to go to 180 degrees
   delay(400);         // Pause to get it time to move
 
@@ -63,12 +154,56 @@ void maybeReset(){
   }
   
 }
+void handleRadio(){
+  if ( radio.available() )
+    {
+      // Dump the payloads until we've gotten everything
+      unsigned long got_time;
+      bool done = false;
+      while (!done)
+      {
+        // Fetch the payload, and see if this was the last one.
+        done = radio.read( &got_time, sizeof(unsigned long) );
 
+        // Spew it
+        printf("Got payload %lu...",got_time);
+        Serial.print("got this: "); Serial.print(got_time);Serial.println();
+        
+        if(got_time == tripWireCode){
+           if(millis() < 120000){
+//              shock();
+//              Serial.print(" TESTING SHOCK: Board time in minutes: ");
+//              Serial.print((millis()/(1000.0*60.0)));
+//              Serial.print("\nmillis(): ");
+//              Serial.print(millis());
+//              Serial.print("\ntimeout: ");
+//              Serial.print(testingTimeout);
+           }else{
+//             Serial.print("Shock triggered from trip wire.\n");
+//            handle_s();
+           }
+           //262, 294, 330, 349
+           beep(1, 330);
+           beep(1,262);
+        }
+        if(got_time == proxCode){
+          beep(1, 262);
+           beep(1,330);
+        }
+        // Delay just a little bit to let the other unit
+        // make the transition to receiver
+        //delay(20);
+      }
+  
+    }
+}
+  
+  
 void loop(){
   maybeReset(); // periodically put the servo back because electrical noise tends to move it..
   handleLight();
-
-
+ // handleRadio();
+//Serial.print("gay");
   if (Serial.available() > 0)
   {
     ByteReceived = Serial.read();
@@ -89,6 +224,12 @@ void loop(){
     case 'b':
       handle_b(); //buzz for warning
       break;
+    case 'r':
+      handle_r();
+      break;
+    case 'w':
+      //handle_w();
+      break;
     }
 
 
@@ -96,7 +237,7 @@ void loop(){
     Serial.println();    // End the line
 
     // END Serial Available
-  }
+  } 
 
 }  
 void warn(){
@@ -117,14 +258,25 @@ void beep(int count){
     delay(silence);
   } 
 }
-
+void beep(int count, int frq){
+  int duration = 100;
+  int silence = 75;
+  for(int i =0; i<count; i++){
+    tone(buzzerPin, frq, duration);
+    delay(duration); 
+    if(i == count -1){ // if this is the last beep, don't delay! This is mostly
+      break;           // nice to shock immediatey after beeps.
+    }
+    delay(silence);
+  } 
+}
 
 
 //SHOCK
 void shock(){
-  servo1.attach(9);
+  servo1.attach(servoPin);
   handleLight();
-  servo1.write(88);    // Tell servo to go to 90 degrees
+  servo1.write(55);    // Tell servo to go to 90 degrees
   handleLight();
   delay(500);         // Pause to get it time to move
   handleLight();
@@ -182,8 +334,10 @@ unsigned long maxPressTime = 700; // milliseconds.
 int panicCounter = 0;
 int maxPanics= 10;
 unsigned long lightOnTimeout = 13000; //13 seconds
-void handleLight(){
-  if(millis() - lastReported > 10000){
+
+void handleLight(){return;}
+void handleLightx(){
+  if(millis() - lastReported > 20000){
     lightLevel = analogRead(lightSensorPin);
     Serial.print("LIGHT LEVEL: ");
     Serial.print(lightLevel);
@@ -262,9 +416,26 @@ void handleLight(){
 
 
 }
+void handle_r(){
+  
+  
+}
 
+void handle_w(){
+  Serial.println("handling w");
+  // First, stop listening so we can talk
+  radio.stopListening();
+
+  // Send the final one back.
+  
+  radio.write( &squirtHimCode, sizeof(unsigned long) );
+//  printf("Sent response.\n\r");
+//  Serial.println("sending shock notice for trip wire.");
+  // Now, resume listening so we catch the next packets.
+  radio.startListening();
+}
 void panic(){
-  servo1.attach(9);
+  servo1.attach(servoPin);
   servo1.write(restingDegrees);   // Tell servo to go to 180 degrees
   delay(400);         // Pause to get it time to move
 
